@@ -1,0 +1,18 @@
+define(['ko'], function(ko) {
+    return function(tile) {
+        var self = this;
+        
+        console.log('tile', tile);
+        self.title = tile.title;
+        self.id = tile.id;
+        self.instanceCount = tile.instanceCount;
+        self.thumbnail = tile.thumbnail;
+        self.standards = tile.standards;
+        self.highlight = tile.highlight;
+        self.firstSku = tile.firstSku;
+        self.allProductsAvailable = tile.availableProducts > 0 && tile.availableProducts === tile.unavailableProducts;
+        self.availableProducts = tile.availableProducts;
+        self.unavailableProducts = tile.unavailableProducts;
+        self.loading = ko.observable(false);
+    };
+});

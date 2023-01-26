@@ -1,0 +1,9 @@
+define(['ko', '_'], function (ko, _) {
+    return function (facetValue) {
+        var self = this;
+        self.name = ko.observable(facetValue.name);
+        self.label = ko.observable(facetValue.label);
+        self.count = ko.observable(facetValue.count);
+        self.checked = ko.observable(facetValue.checked);
+    };
+});

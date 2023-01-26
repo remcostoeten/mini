@@ -1,0 +1,273 @@
+define(['ko', 'text!./search-autocomplete.html', '_', '../../../../binding/clickOutside'], function (ko, htmlString, _) {
+
+    function SearchAutocompleteComponent(params) {
+        var self = this;
+
+        self.apiUrl = ko.observable(params.apiUrl);
+        self.defaultTerm = !_.isUndefined(params.defaultTerm) ? params.defaultTerm : ko.observable('');
+        self.searchTermField = !_.isUndefined(params.searchTermField) ? params.searchTermField : 'searchterm';
+        self.inputText = ko.observable(self.defaultTerm()).extend({rateLimit: 250});
+        self.autoFocus = ko.observable(!_.isUndefined(params.autoFocus) ? params.autoFocus : false);
+        self.placeholder = ko.observable(!_.isUndefined(params.placeholder) ? params.placeholder : 'Vul een zoekterm in...');
+        self.defaultTerm.subscribe(function (newValue) {
+            // this is needed to reset the textbox value after a value was selected (and added) outside this component
+            self.inputText(newValue);
+        });
+        self.isVisible = ko.observable(false);
+        // todo: add support for predefined options
+        self.options = ko.observableArray([]); // todo: support optional predefined params.values());
+
+        // $PAYLOAD, $TEXT and $TITLE will be replaced with their corresponding value
+        self.dictionaries = [
+            // {name: "title", description: "Product", url_pattern: "/product/$PAYLOAD"},
+            {name: "product", description: "Producten", url_pattern: "/product/$PAYLOAD"},
+            {
+                name: "brand", description: false,
+                url_pattern: "/search?" + self.searchTermField + "=brand:$TITLE"
+            },
+            {
+                name: "category",
+                description: "Categorieën",
+                url_pattern: "/categories/",
+                url_transformer: (result, matchingDictionary) => {
+                    // console.log('CB', result);
+                    // console.log('CBu', matchingDictionary.url_pattern);
+                    var url = matchingDictionary.url_pattern;
+                    var rootCategory = _.get(result, 'rootCategory', null);
+                    if (!_.isNull(rootCategory)) {
+                        url += rootCategory.slug + '/';
+                    }
+                    var subCategory = _.get(result, 'subCategory', null);
+                    if (!_.isNull(subCategory)) {
+                        url += subCategory.slug + '/';
+                    }
+                    url += result.payload;
+                    return url.replace('$PAYLOAD', result.payload).replace('$TEXT', result.text).replace('$TITLE', result.title);
+                }
+            },
+            // {name: "property_Soort", description: "Soort (filter catalogues nog niet!)", url_pattern: "/search?term=property_Soort:$TITLE"},
+        ];
+
+        // field to use with params.exclude, can be null if params.exclude is a regular array
+        self.excludeBy = ko.observable(!_.isUndefined(params.excludeBy) ? params.excludeBy : null);
+        // property in options to compare with excludeBy
+        self.excludeOptionByField = ko.observable('text'); // todo: allow setting using parameters, this can be id of text
+        self.mapExclusions = function (exclusions) {
+            if (_.isNull(self.excludeBy())) {
+                // exclude by textual values
+                // todo: check isFunction?
+                // console.log('exclude options (text): ' + _.map(exclusions, (exclude) => exclude()));
+                return exclusions;
+            } else {
+                if (_.isFunction(exclusions)) { // e.g. observableArray or computed property
+                    return _.map(exclusions(), (exclusion) => _.result(exclusion, self.excludeBy()));
+                } else { // regular array
+                    // console.log(`exclude non-function options by: ${self.excludeBy()}`, exclusions);
+                    return _.map(exclusions, (exclusion) => _.result(exclusion, self.excludeBy()));
+                }
+            }
+        };
+        self.exclude = ko.observableArray(!_.isUndefined(params.exclude) ? self.mapExclusions(params.exclude) : null);
+        if (_.isFunction(params.exclude)) {
+            params.exclude.subscribe(function (change) {
+                // subscribe to params.exclude to update internal observableArray
+                if (change !== null) {
+                    self.exclude(self.mapExclusions(change));
+                }
+            });
+        }
+
+        self.size = params.size || ''; // only supports <empty string> or small
+        self.value = !_.isUndefined(params.value) ? params.value : ko.observable('');
+        self.aaaa = '<span>aaaa</span>>';
+        self.displayValue = ko.computed(function () {
+            // handle AJAX response values
+            if (_.isObject(self.value()) && !_.isNull(self.value().text)) {
+                return self.value().text;
+            }
+            return self.value();
+        });
+        self.internalValue = ko.observable(null);
+        self.internalValue.subscribe(function (newValue) {
+            self.value(newValue);
+        });
+
+        self.loader = ko.observable(false);
+        self.requestCounter = 0;
+        self.currentFocus = ko.observable(0);
+        self.resetFocus = function () {
+            self.currentFocus(0);
+        };
+        self.hide = function () {
+            self.isVisible(false);
+        };
+        self.show = function () {
+            self.isVisible(true);
+        };
+        self.handleKey = function (data, event) {
+            // show options if key is not escape
+            if ((event.key.length === 1) && !self.isVisible()) {
+                self.show();
+            }
+            // show options if key is enter and options are not in visible state but do not send a new request
+            if (event.key === 'Enter' && !self.isVisible()) {
+                self.show();
+                return true;
+            }
+
+            // fetch options only when a letter/number
+            if (event.key.length === 1 || event.key === 'Backspace') {
+                self.getOptions();
+            }
+            if (_.includes(['Down', 'ArrowDown'], event.key)) {
+                // select item below or return to top when on the end of the list
+                if (self.currentFocus() === (self.totalSuggestions())) {
+                    self.currentFocus(0);
+                    return true;
+                }
+                self.currentFocus(self.currentFocus() + 1);
+            } else if (_.includes(['Up', 'ArrowUp'], event.key)) {
+                // select item above or return to bottom if already on first item
+                if (self.currentFocus() <= 0) {
+                    self.currentFocus(self.totalSuggestions());
+                    return true;
+                }
+                self.currentFocus(self.currentFocus() - 1);
+            } else if (_.includes(['Enter'], event.key)) {
+                // try to find the selected value by index and update the viewmodel
+                event.preventDefault();
+                // first item is a regular search request
+                if (self.currentFocus() === 0) {
+                    window.location = '/search?' + self.searchTermField + '=' + self.inputText();
+                    return true;
+                }
+                if (self.currentFocus() > -1) {
+                    let matchingIndex = _.findIndex(self.allSortedSuggestions(), {'index': self.currentFocus()});
+                    if (matchingIndex === -1) {
+                        // this should never happen
+                        self.resetFocus();
+                        console.warn("Dit zou niet moeten gebeuren")
+                        return false;
+                    }
+
+                    var match = self.allSortedSuggestions()[matchingIndex];
+                    self.selectOption(match);
+                }
+            } else if (_.includes(['Esc', 'Escape'], event.key)) {
+                // hide the options
+                self.hide();
+                self.resetFocus();
+            }
+            return true;
+        };
+        self.selectOption = function (option) {
+            if (_.isNull(option)) {
+                return false;
+            }
+            window.location = option.url;
+            // self.internalValue(option);
+            // self.inputText(option.text);
+            // self.hide();
+            // self.resetFocus();
+        };
+        self.totalSuggestions = ko.pureComputed(function () {
+            return _.sumBy(self.sortedSuggestions(), function (o) {
+                return o.suggestions.length;
+            });
+        });
+        self.allSortedSuggestions = ko.pureComputed(function () {
+            return _.flatMap(self.sortedSuggestions(), (sug) => {
+                return sug.suggestions;
+            });
+        });
+        self.sortedSuggestions = ko.pureComputed(function () {
+            return _.orderBy(self.options(), function (option) {
+                return option.order
+            });
+        });
+        self.getOptions = _.debounce(function () {
+            if (self.inputText() === '') {
+                return false;
+            }
+            var urlSafeTerm = encodeURIComponent(self.inputText());
+            var requestUrl = self.apiUrl() + 'term=' + urlSafeTerm;
+            _.forEach(self.dictionaries, (dict) => {
+                requestUrl += '&dictionaries=' + dict.name;
+            });
+            requestUrl += '&rows=5&descriptions=false';
+            var requestId = self.requestCounter;
+            self.requestCounter++;
+            self.loader(true);
+            fetch(requestUrl, {headers: {"Content-Type": "application/json; charset=utf-8"}})
+                .then(res => {
+                    if (res.status !== 200) {
+                        return false;
+                    }
+                    return res.json();
+                })
+                .then(response => {
+                    var shouldProcess = (requestId + 1) === self.requestCounter;
+                    if (!shouldProcess) {
+                        return false;
+                    }
+                    self.show();
+                    self.options.removeAll();
+                    var itemIndex = 0;
+                    _.forEach(response, (dictionarySuggestions) => {
+                        let suggestionGroup = dictionarySuggestions.dictionary;
+                        let matchingDictionary = _.find(self.dictionaries, {'name': suggestionGroup});
+
+                        var results = _.map(dictionarySuggestions.suggestions, function (result) {
+                            itemIndex++;
+                            var useCallbackUrl = false;
+                            var callbackUrlResult = null
+                            if (_.has(matchingDictionary, 'url_transformer') && _.isFunction(matchingDictionary.url_transformer)) {
+                                callbackUrlResult = matchingDictionary.url_transformer(result, matchingDictionary);
+                                useCallbackUrl = true;
+                            }
+                            return {
+                                id: result.payload,
+                                text: result.text,
+                                title: result.title,
+                                order: result.order,
+                                html: result.title.replace(new RegExp(self.inputText(), "gi"), (match) => `<strong>${match}</strong>`),
+                                url: useCallbackUrl ? callbackUrlResult : matchingDictionary.url_pattern.replace('$PAYLOAD', result.payload).replace('$TEXT', result.text).replace('$TITLE', result.title),
+                                imageUrl: result.imageUrl,
+                                properties: result.properties,
+                                count: _.toInteger(result.count),
+                                brand: result.brand,
+                                ean: result.ean,
+                                sku: result.sku,
+                                rootCategory: result.rootCategory,
+                                subCategory: result.subCategory,
+                                index: itemIndex,
+                            }
+                        });
+
+                        var suggestion = {
+                            group: suggestionGroup,
+                            title: matchingDictionary.description,
+                            suggestions: results
+                        };
+
+                        if (suggestion.group === "brand") {
+                            suggestion.order = 0;
+                        } else if (suggestion.group === "category") {
+                            suggestion.order = 1;
+                        } else if (suggestion.group === "product") {
+                            suggestion.order = 2;
+                        }
+                        self.options.push(suggestion);
+                    });
+                })
+                .catch(err => {
+                    console.warn('Suggest failed! Error: ' + err);
+                })
+                .finally(() => {
+                    self.loader(false);
+                });
+        }, 250);
+    }
+
+    return {viewModel: SearchAutocompleteComponent, template: htmlString};
+});

@@ -1,0 +1,82 @@
+define(['ko', '_', 'text!./product-tile.html'], function (ko, _, htmlString) {
+    function ProductTile(params) {
+        var self = this;
+        var product = params.product;
+        self.title = product.title;
+        self.id = product.id;
+        self.categoryId = product.category;
+        self.realPrice = product.realPrice;
+        self.displayPrice = ko.pureComputed(function () {
+            // todo: multilanguage/locales
+            return new Intl.NumberFormat('nl-NL', {style: 'currency', currency: 'EUR'}).format(self.realPrice);
+        });
+        self.quantity = 1;
+        self.priceViewModel = product.priceViewModel;
+        self.instanceCount = product.instanceCount;
+        self.thumbnail = product.thumbnail;
+        self.standards = product.standards;
+        self.highlight = product.highlight;
+        self.firstSku = product.firstSku;
+        self.isFavorite = ko.observable(params.isFavorite);
+        self.slug = product.slug;
+        self.displayVatText = ko.pureComputed(function () {
+            return 'excl. BTW';
+        });
+
+        // todo: separate viewmodel with computed prop
+        self.displayStandards = function (standard) {
+            return _.join(
+                _.map(_.filter(standard.values, (val) => !_.isNull(val.value)), (val) =>{
+                    if(_.isEmpty(val.value)) {
+                        return val.name;    
+                    }
+                    return val.name + ': ' + val.value})
+                , ' | ');
+        };
+
+        self.addToCart = function () {
+            var url = '/internal-api/add-to-cart?sku=' + self.firstSku + '&quantity=1'; // todo: allow other QTY
+            fetch(url, {
+                method: 'GET',
+                mode: 'cors',
+                cache: 'no-cache',
+                credentials: 'same-origin',
+                redirect: 'follow',
+                referrerPolicy: 'no-referrer',
+            })
+                .then(response => response.json())
+                .then(data => {
+                    console.log('cart:', data);
+                    // if (_.isArray(data)) {
+                    // self.isFavorite(_.includes(data, self.firstSku));
+                    // }
+                })
+                .finally(function () {
+                    console.log('klaar met add to car request');
+                });
+        };
+
+        self.addToFavorites = function () {
+            var url = '/internal-api/add-to-favorites?sku=' + self.firstSku;
+            fetch(url, {
+                method: 'GET',
+                mode: 'cors',
+                cache: 'no-cache',
+                credentials: 'same-origin',
+                redirect: 'follow',
+                referrerPolicy: 'no-referrer',
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (_.isArray(data)) {
+                        self.isFavorite(_.includes(data, self.firstSku));
+                    }
+                })
+                .finally(function () {
+                    console.log('klaar met favorites request');
+                });
+        }
+    }
+
+    return {viewModel: ProductTile, template: htmlString};
+});

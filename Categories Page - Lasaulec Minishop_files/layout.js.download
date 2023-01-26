@@ -1,0 +1,6 @@
+define(['ko'], function(ko) {
+    return function layout() {
+        var self = this;
+        self.searchTerm = ko.observable("");
+    }
+});

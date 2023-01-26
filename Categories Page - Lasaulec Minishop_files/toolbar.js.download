@@ -1,0 +1,12 @@
+define(['ko', 'text!./toolbar.html', '_'], function (ko, htmlString, _) {
+	function Toolbar(params) {
+		var self = this;
+		self.totalPages = params.totalPages;
+		self.currentPage = params.currentPage;
+		self.totalProducts = params.totalProducts;
+		self.sorter = params.sorter;
+		self.listGridToggle = params.listGridToggle;
+		self.totalPageProducts = params.totalPageProducts;
+	}
+	return { viewModel: Toolbar, template: htmlString };
+});
