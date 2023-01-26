@@ -1,0 +1,330 @@
+define([
+	'ko',
+	'jquery',
+	'_',
+	'search/facet',
+	'search/facetvalue',
+	'../../binding/stopBinding',
+	'../../binding/shiftClick',
+], function (ko, $, _, facetViewModel, facetValueViewModel) {
+	return function SearchResultViewModel(
+		term,
+		products,
+		pages,
+		currentPage,
+		resultCount,
+		facets,
+		favorites,
+		restrictedFacets,
+		height,
+		width,
+	) {
+		self = this;
+
+		self.term = ko.observable(term);
+		self.isMerging = ko.observable(false);
+		self.lastChecked = ko.observable(null);
+		self.products = ko.observableArray(products);
+		self.selectedProducts = ko.observableArray([]);
+		self.currentPage = ko.observable(currentPage);
+		self.totalResults = ko.observable(resultCount);
+		self.totalPages = ko.observable(pages);
+		self.width = ko.observable(width);
+		self.height = ko.observable(height); // array of facet names which the user is not allowed to see or change
+		self.restrictedFacets = ko.observableArray(
+			!_.isEmpty(restrictedFacets) ? restrictedFacets : [],
+		);
+		self.facets = ko.observableArray(
+			facets.map(function (facet) {
+				return new facetViewModel(facet);
+			}),
+		);
+		self.favorites = ko.observableArray(favorites);
+
+		self.loader = ko.observable(0);
+		self.requestCounter = 0;
+		ko.bindingHandlers.winsize = {
+			init: function (element, valueAccessor) {
+				$(window).resize(function () {
+					var value = valueAccessor();
+					value({
+						width: $(window).width(),
+						height: $(window).height(),
+					});
+				});
+			},
+		};
+		self.windowSize = ko.observable();
+		console.log(self.width());
+		console.log(self.height());
+		// todo: cart (outside this viewmodel)
+
+		// self.getStandardIcon = function(identifier) {
+		//     return _.find(self.standards(), ['identifier', identifier]).icon;
+		// };
+
+		self.isFavorite = function (sku) {
+			return _.includes(self.favorites(), sku);
+		};
+
+		self.checkedFacets = ko.pureComputed(function () {
+			var checked = [];
+			self.facets().forEach(function (facet) {
+				var selected = _.filter(facet.values(), function (val) {
+					return val.checked();
+				});
+				selected.forEach(function (facetValue) {
+					checked.push({
+						name: facet.name,
+						value: facetValue.name(),
+						valueLabel: facetValue.label(),
+						label: facet.label,
+					});
+				});
+			});
+			return checked;
+		});
+
+		self.checkedFacetsGrouped = ko.pureComputed(function () {
+			var groupedAndSorted = _.groupBy(
+				_.sortBy(self.checkedFacets(), (facet) => facet.label),
+				'label',
+			);
+			return _.map(_.toPairs(groupedAndSorted), (item) => {
+				var restricted = false;
+				if (!_.isEmpty(item) && !_.isEmpty(item[1])) {
+					restricted = _.includes(
+						self.restrictedFacets(),
+						item[1][0].name,
+					);
+				}
+				return {
+					key: item[0],
+					values: item[1],
+					restricted: restricted,
+				};
+			});
+		});
+
+		self.clearAllFilters = function () {
+			_.forEach(self.facets(), function (facet) {
+				// do not clear restricted facets to prevent UI quirks
+				if (!_.includes(self.restrictedFacets(), facet.name)) {
+					_.forEach(facet.values(), function (value) {
+						value.checked(false);
+					});
+				}
+			});
+			$('#search_filters input:checked').prop('checked', false);
+			self.handleSubmit();
+		};
+		self.clearFilter = function (data) {
+			var facet = _.find(self.facets(), ['name', data.name]);
+			if (!_.isUndefined(facet)) {
+				var val = _.find(facet.values(), function (val) {
+					return val.name() === data.value;
+				});
+				if (!_.isUndefined(val)) {
+					val.checked(false);
+				}
+			}
+			self.handleSubmit();
+		};
+
+		self.gotoPreviousPage = function () {
+			if (self.currentPage() === 1) {
+				return false;
+			}
+			self.gotoPage(self.currentPage() - 1);
+		};
+		self.gotoNextPage = function () {
+			if (self.totalPages() === self.currentPage()) {
+				return false;
+			}
+			self.gotoPage(self.currentPage() + 1);
+		};
+		self.gotoFirstPage = function () {
+			self.gotoPage(self.currentPage() / self.currentPage());
+		};
+		self.gotoLastPage = function () {
+			self.gotoPage(self.totalPages());
+		};
+
+		self.gotoPage = function (page) {
+			document.getElementById('product-search-container').scrollIntoView({
+				behavior: 'smooth',
+			});
+			self.handleSubmit(page);
+		};
+
+		self.appliedFilters = ko.observableArray([]);
+		self.handleSubmit = function (page) {
+			self.appliedFilters([]);
+			if (!_.isUndefined(page) && _.parseInt(page) > 0) {
+				self.currentPage(page);
+			} else {
+				// when a filter is applied no page param is provided, reset to 1
+				self.currentPage(1);
+			}
+			self.facets().map(function (facet, i) {
+				var obj = {};
+				var checkedValues = facet.getCheckedValues();
+				if (checkedValues.length > 0) {
+					obj.name = facet.name;
+					obj.values = [];
+					_.forEach(checkedValues, function (checkedValue) {
+						obj.values.push(checkedValue.name);
+					});
+					self.appliedFilters.push(obj);
+				}
+			});
+
+			self.searchProducts();
+		};
+		self.abortController = new AbortController();
+		self.abortSignal = self.abortController.signal;
+		self.searchProducts = function () {
+			var requestId = self.requestCounter;
+			self.requestCounter++;
+			self.loader(self.loader() + 1);
+
+			const data = new URLSearchParams();
+			_.forEach(self.appliedFilters(), function (filter, index) {
+				data.append(`filters[${index}].Name`, filter.name);
+				_.forEach(filter.values, function (filterValue) {
+					data.append(`filters[${index}].Values`, filterValue());
+				});
+			});
+			data.append('page', self.currentPage());
+			data.append('searchterm', self.term());
+
+			// console.debug(data.toString());
+
+			self.abortController.abort(); // abort previous requests
+			self.abortController = new AbortController();
+
+			fetch('/internal-api/search?', {
+				method: 'POST',
+				mode: 'cors',
+				cache: 'no-cache',
+				credentials: 'same-origin',
+				redirect: 'follow',
+				referrerPolicy: 'no-referrer',
+				body: data,
+				signal: self.abortController.signal,
+			})
+				.then((response) => response.json())
+				.then((response) => {
+					var shouldProcess = requestId + 1 === self.requestCounter;
+					if (!shouldProcess) {
+						// console.log(`[SKIP] skip request ${requestId}`);
+						return false;
+					}
+					// console.log(`[OK] process request ${requestId}`);
+					self.products(response.tiles);
+
+					var responseFacetVms = response.facets.map(function (
+						facet,
+					) {
+						return new facetViewModel(facet);
+					});
+					let responseFacets = _.keyBy(
+						responseFacetVms,
+						(facet) => facet.name,
+					);
+					var vmFacets = _.keyBy(
+						self.facets(),
+						(facet) => facet.name,
+					);
+
+					var vmFacetKeys = _.keys(vmFacets);
+					var responseKeys = _.keys(responseFacets);
+
+					var vmMissingKeys = _.difference(responseKeys, vmFacetKeys);
+					var responseMissingKeys = _.difference(
+						vmFacetKeys,
+						responseKeys,
+					);
+					//  voeg alle filters toe die niet bestaan maar wel voorkomen in de response
+					_.forEach(vmMissingKeys, (facetName) => {
+						// console.log('add newly added facet: ' + facetName, responseFacets[facetName]);
+						self.facets.push(responseFacets[facetName]);
+					});
+					// zet alle filters op 0 die niet voorkomen in de response
+					_.forEach(responseMissingKeys, (facetName) => {
+						// console.log('set all values\' count to 0 for facet: ' + facetName, vmFacets[facetName]);
+						_.forEach(vmFacets[facetName].values(), (val) => {
+							val.count(0);
+						});
+					});
+					// zet alle filters hun count die wel voorkomen in de response
+					_.forEach(
+						_.intersection(vmFacetKeys, responseKeys),
+						(facetName) => {
+							let matchingResponseFacet =
+								responseFacets[facetName];
+							let matchingVmFacet = vmFacets[facetName];
+							_.forEach(matchingVmFacet.values(), (val) => {
+								// attempt to find the matching facet value in the response
+								var matchingValue = _.find(
+									matchingResponseFacet.values(),
+									(rVal) => rVal.name() === val.name(),
+								);
+								if (!_.isUndefined(matchingValue)) {
+									// response has a new count for the facet value
+									val.count(matchingValue.count());
+								} else {
+									// response doesn't have this facet value, make it 0 in the interface
+									val.count(0);
+								}
+							});
+						},
+					);
+					// voeg alle filter opties toe die niet bestaan
+					_.forEach(responseFacetVms, (facet) => {
+						_.forEach(facet.values(), (val) => {
+							if (!_.isUndefined(vmFacets[facet.name])) {
+								var valMatch = _.find(
+									vmFacets[facet.name].values(),
+									(vmVal) => vmVal.name() === val.name(),
+								);
+								if (_.isUndefined(valMatch)) {
+									vmFacets[facet.name].values.push(val);
+								}
+							}
+						});
+					});
+					self.totalPages(response.pages);
+					self.currentPage(response.currentPage);
+					self.totalResults(response.count);
+					// self.pageSize(data.pageSize);
+				})
+				.catch(function (error) {
+					console.error('fetch error:', error);
+				})
+				.finally(function () {
+					self.loader(self.loader() - 1);
+					// manually reset location.search to prevent strange issues
+					const currentUrl = window.location
+						.toString()
+						.replace(window.location.search.toString(), '');
+					const url = new URL(currentUrl);
+					url.searchParams.set('page', self.currentPage());
+					url.searchParams.set('searchterm', self.term());
+					_.forEach(self.appliedFilters(), function (filter, index) {
+						url.searchParams.set(
+							`filters[${index}].Name`,
+							filter.name,
+						);
+						_.forEach(filter.values, function (filterValue) {
+							url.searchParams.append(
+								`filters[${index}].Values`,
+								filterValue(),
+							);
+						});
+					});
+					window.history.pushState({}, '', url);
+				});
+		};
+	};
+});

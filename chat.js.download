@@ -1,0 +1,162 @@
+window._genesys = {
+    widgets: {
+        main: {
+            preload: ['webchat'],
+            //Define your theme here
+            downloadGooglefont: false,
+            theme: 'lasaulec',
+            themes: {
+                lasaulec: 'lasaulec-theme',
+            },
+            // Define your Language here  
+            lang: 'nl-NL',
+            // Relative path to the language file
+            i18n: "./js/chat/lang/nl-NL.json",
+            mobileMode: 'auto',
+            mobileModeBreakpoint: 600
+        },
+        // Define your identity here (Org-ID, Widget Deplyoment key, Queue TargetAddress) - These settings  
+        webchat: {
+            chatButton: {
+                enabled: true, // (boolean) Enable/disable chat button on screen.
+            },
+            "transport": {
+                "type": "purecloud-v2-sockets",
+                "dataURL": "https://api.mypurecloud.de",
+                "deploymentKey": "bd1fc11a-610c-4967-8805-3a76eaa7524f",
+                "orgGuid": "505a214a-f13c-4cd8-b331-07e63d00b796",
+                "interactionData": {
+                    "routing": {
+                        "targetType": "QUEUE",
+                        "targetAddress": "Webchat",
+                        "priority": 2
+                    }
+                }
+            }
+        },
+        sidebar: {
+
+            showOnStartup: true,
+
+            position: 'left',
+
+            expandOnHover: true,
+
+            channels: [{
+
+                name: 'ChannelSelector',
+                clickCommand: 'ChannelSelector.open',
+                clickOptions: {},
+
+                //use your own static string or i18n query string for the below two display properties
+                displayName: 'Live Assist',
+                displayTitle: 'Get live help',
+
+                icon: 'agent'
+            },
+
+                {
+                    name: 'Search',
+                    clickCommand: 'Search.open',
+                    clickOptions: {},
+
+                    // Example of i18n query string: '@i18n:search.SearchName' where 'search' refers to the plugin namepsace and 'SearchName' refers to the property key containing the actual text.
+
+                    displayName: '@i18n:search.SearchName',
+                    displayTitle: '@i18n:search.SearchTitle',
+
+                    icon: 'knowledge-center',
+                    onClick: function ($, CXBus, Common) {
+                        _genesys.widgets.bus.command('Search.open');
+                    }
+                },
+
+                {
+                    name: 'Offers',
+                    displayName: '@i18n:sidebar.OffersName',
+                    displayTitle: '@i18n:sidebar.OffersName'
+                },
+
+                {
+                    name: 'ClickToCall',
+                    displayName: '@i18n:sidebar.ClickToCallName',
+                    displayTitle: '@i18n:sidebar.ClickToCallTitle'
+                },
+
+                {
+                    name: 'WebChat'
+                }
+            ]
+        }
+    }
+};
+
+//Modify your Chat form here
+
+function getAdvancedConfig() {
+    return {
+        "form": {
+            "autoSubmit": false,
+            "firstname": "",
+            "lastname": "",
+            "email": "",
+            "subject": ""
+        },
+        "formJSON": {
+            "wrapper": "<table></table>",
+            "inputs": [
+                {
+                    "id": "cx_webchat_form_firstname",
+                    "name": "firstname",
+                    "maxlength": "100",
+                    "placeholder": "@i18n:webchat.ChatFormPlaceholderFirstName",
+                    "label": "@i18n:webchat.ChatFormFirstName",
+                    validateWhileTyping: false, // default is false
+                    validate: function(event, form, input, label, $, CXBus, Common) {
+                        if(input) {
+                            if (input.val())
+                                return true;
+                            else
+                                return false;
+                        }
+                        return false;
+                    }
+                },
+                {
+                    "id": "cx_webchat_form_lastname",
+                    "name": "lastname",
+                    "maxlength": "100",
+                    "placeholder": "@i18n:webchat.ChatFormPlaceholderLastName",
+                    "label": "@i18n:webchat.ChatFormLastName"
+                },
+                {
+                    "id": "cx_webchat_form_email",
+                    "name": "email",
+                    "maxlength": "100",
+                    "placeholder": "@i18n:webchat.ChatFormPlaceholderEmail",
+                    "label": "@i18n:webchat.ChatFormEmail",
+                    validateWhileTyping: false, // default is false
+                    validate: function(event, form, input, label, $, CXBus, Common) {
+                        if(input) {
+                            if (input.val())
+                                return true;
+                            else
+                                return false;
+                        }
+                        return false;
+                    }
+                },
+                {
+                    "id": "cx_webchat_form_subject",
+                    "name": "subject",
+                    "maxlength": "100",
+                    "placeholder": "@i18n:webchat.ChatFormPlaceholderSubject",
+                    "label": "@i18n:webchat.ChatFormSubject",
+                    "type": "textarea"
+                }
+            ]
+        }
+    };
+}
+
+const customPlugin = CXBus.registerPlugin('Custom');

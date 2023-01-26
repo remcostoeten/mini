@@ -1,0 +1,13 @@
+﻿define(['ko', 'jquery'], function(ko, $) {
+    ko.bindingHandlers.clickOutside = {
+        init: function (element, valueAccessor, allBindings, viewModel, bindingContext) {
+            var fn = ko.utils.unwrapObservable(valueAccessor());
+
+            $('html').on('click', function (e) {
+                if (!($.contains(element, e.target) || element === e.target)) {
+                    fn();
+                }
+            });
+        },
+    }
+});

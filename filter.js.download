@@ -1,0 +1,92 @@
+// TODO FILTERS IN ALFABETISCHE VOLGORDE
+
+define(['ko', 'text!./filter.html', '_'], function (ko, htmlString, _) {
+	function FacetComponentVM(params) {
+		var self = this;
+		self.facet = params.facet;
+
+		self.orderByFields = {
+			name: 'name',
+			count: 'count',
+		};
+		self.orderBy = ko.observable(self.orderByFields.count);
+		self.orderAsc = ko.observable(false);
+		// Return asc/desc to use with _.orderBy
+		self.orderByDirection = ko.pureComputed(function () {
+			return self.orderAsc() ? 'asc' : 'desc';
+		});
+		self.toggleOrderBy = function () {
+			self.orderBy(
+				self.orderBy() === self.orderByFields.count
+					? self.orderByFields.name
+					: self.orderByFields.count,
+			);
+			self.orderAsc(self.orderBy() !== self.orderByFields.count); // default: order desc on count, asc on name
+		};
+		self.toggleOrderDirection = function () {
+			self.orderAsc(!self.orderAsc());
+		};
+		self.setOrderByName = function () {
+			self.orderAsc(true);
+			self.orderBy(self.orderByFields.name);
+		};
+		self.setOrderByCount = function () {
+			self.orderAsc(false);
+			self.orderBy(self.orderByFields.count);
+		};
+		self.isClosed = ko.observable(false);
+		self.isOpen = ko.observable(false);
+
+		self.closeFilter = function () {
+			self.isClosed(!self.isClosed());
+		};
+
+		self.facetSearchQuery = ko.observable('');
+		self.resetFacetSearchQuery = function () {
+			self.facetSearchQuery('');
+		};
+		self.showFacetSearch = ko.pureComputed(function () {
+			return self.facet.values().length > 5;
+		});
+
+		self.totalValueCount = ko.pureComputed(function () {
+			return self.facet.values().length;
+		});
+
+		self.matchingFacetValueCount = ko.pureComputed(function () {
+			return self.matchingFacetValues().length;
+		});
+
+		self.showMoreMatchingFacet = ko.pureComputed(function () {
+			return self.matchingFacetValues().length - 5;
+		});
+
+		self.matchingFacetValues = ko.pureComputed(function () {
+			// empty query, just return ordered results
+			if (_.isEmpty(self.facetSearchQuery())) {
+				return self.orderedValues();
+			}
+
+			return _.filter(self.orderedValues(), function (facet) {
+				return _.includes(
+					_.deburr(_.toLower(facet.name())),
+					_.deburr(_.toLower(self.facetSearchQuery())),
+				);
+			});
+		});
+
+		self.orderedValues = ko.pureComputed(function () {
+			return _.orderBy(
+				self.facet.values(),
+				function (facet) {
+					return self.orderBy() === self.orderByFields.count
+						? facet.count()
+						: facet.name();
+				},
+				self.orderByDirection(),
+			);
+		});
+	}
+
+	return { viewModel: FacetComponentVM, template: htmlString };
+});

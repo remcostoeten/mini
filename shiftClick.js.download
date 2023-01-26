@@ -1,0 +1,14 @@
+define(['ko', 'jquery'], function(ko, $) {
+    ko.bindingHandlers.shiftClick = {
+        init: function (element, valueAccessor, allBindingsAccessor, viewModel) {
+                var allBindings = allBindingsAccessor();
+                $(element).click(function (event) {
+                    if (event.shiftKey) {
+                        valueAccessor().call(viewModel, viewModel, event);
+                        return false;
+                    }
+                    return true;
+                });
+          }
+    }
+});

@@ -1,0 +1,13 @@
+require.config({
+    baseUrl: '/js/ui',
+    paths: {
+        ko: "/js/vendor/knockout-3.5.1",
+        "ko.validation": "/js/vendor/knockout.validation",
+        "ko.validation.nl": "/js/vendor/knockout.validation.nl-NL",
+        _: "/js/vendor/lodash.min",
+        jquery: "/js/vendor/jquery-3.4.1",
+        StateMachine: "/js/vendor/statemachine",
+        StateMachineVisualize: "/js/vendor/state-machine-visualize",
+        text: "/js/vendor/text"
+    }
+});

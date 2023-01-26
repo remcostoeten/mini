@@ -1,0 +1,41 @@
+define(['ko', '_', 'text!./pagination.html'], function (ko, _, template) {
+	function Pagination(params) {
+		var self = this;
+
+		self.totalPages = params.totalPages;
+		self.currentPage = params.currentPage;
+
+		self.pages = ko.pureComputed(function () {
+			var pageArray = [];
+			for (let i = 0; i < self.totalPages(); i++) {
+				pageArray[i] = i + 1;
+			}
+
+			var pageArrayWithStartAndEndRemoved = pageArray
+				.slice(1)
+				.slice(0, -1);
+
+			if (pageArrayWithStartAndEndRemoved.length <= 5) {
+				return pageArrayWithStartAndEndRemoved;
+			}
+
+			var start = _.slice(
+				pageArrayWithStartAndEndRemoved,
+				Math.max(self.currentPage() - 3, 0),
+				self.currentPage(),
+			);
+			var end = _.slice(
+				pageArrayWithStartAndEndRemoved,
+				self.currentPage(),
+				Math.min(self.currentPage() + 4, self.totalPages()),
+			);
+
+			return _.flatten(start, end);
+		});
+	}
+
+	return {
+		viewModel: Pagination,
+		template: template,
+	};
+});
