@@ -7,6 +7,11 @@ define(['ko', 'text!./toolbar.html', '_'], function (ko, htmlString, _) {
 		self.sorter = params.sorter;
 		self.listGridToggle = params.listGridToggle;
 		self.totalPageProducts = params.totalPageProducts;
+		self.gridToggler = ko.observable(false);
+		self.isOpen = ko.observable(false);
+		self.gridToggle = function () {
+			self.gridToggler(!self.gridToggler());
+		};
 	}
 	return { viewModel: Toolbar, template: htmlString };
 });

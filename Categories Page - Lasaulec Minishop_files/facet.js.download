@@ -1,21 +1,25 @@
 define(['ko', '_', 'search/facetvalue'], function (ko, _, facetValueVM) {
-    return function (facet) {
-        var self = this;
+	return function (facet) {
+		var self = this;
 
-        self.name = facet.name;
-        self.label = facet.label;
-        self.count = facet.count;
-        self.values = ko.observableArray(_.map(facet.values, function (val) { return new facetValueVM(val)}));
-        self.showValues = ko.observable(false);
+		self.name = facet.name;
+		self.label = facet.label;
+		self.count = facet.count;
+		self.values = ko.observableArray(
+			_.map(facet.values, function (val) {
+				return new facetValueVM(val);
+			}),
+		);
+		self.showValues = ko.observable(false);
 
-        self.getCheckedValues = function () {
-            return _.filter(self.values(), function(val) {
-                return val.checked();
-            });    
-        }
-        
-        self.toggleValue = function () {
-            self.showValues(!self.showValues());
-        }
-    };
+		self.getCheckedValues = function () {
+			return _.filter(self.values(), function (val) {
+				return val.checked();
+			});
+		};
+
+		self.toggleValue = function () {
+			self.showValues(!self.showValues());
+		};
+	};
 });

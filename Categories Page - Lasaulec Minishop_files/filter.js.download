@@ -41,11 +41,16 @@ define(['ko', 'text!./filter.html', '_'], function (ko, htmlString, _) {
 			self.isClosed(!self.isClosed());
 		};
 
+		self.isChecked = ko.observable(false);
+
+		self.isChecked = function () {};
+
 		self.facetSearchQuery = ko.observable('');
 		self.resetFacetSearchQuery = function () {
 			self.facetSearchQuery('');
 		};
 		self.showFacetSearch = ko.pureComputed(function () {
+			return self.facet.values().length > 5;
 			return self.facet.values().length > 5;
 		});
 
